@@ -7,6 +7,7 @@ package main
 import (
 	"fmt"
 	"math"
+	"sort"
 
 	"golang.org/x/tools/benchmark/parse"
 )
@@ -37,13 +38,21 @@ func Correlate(before, after parse.Set) (cmps []BenchCmp, warnings []string) {
 func (c BenchCmp) Name() string           { return c.Before.Name }
 func (c BenchCmp) String() string         { return fmt.Sprintf("<%s, %s>", c.Before, c.After) }
 func (c BenchCmp) Measured(flag int) bool { return (c.Before.Measured & c.After.Measured & flag) != 0 }
-func (c BenchCmp) DeltaNsPerOp() Delta    { return Delta{c.Before.NsPerOp, c.After.NsPerOp} }
-func (c BenchCmp) DeltaMBPerS() Delta     { return Delta{c.Before.MBPerS, c.After.MBPerS} }
+func (c BenchCmp) UnitMeasured(unit string) bool {
+	_, bok := c.Before.Extra[unit]
+	_, aok := c.After.Extra[unit]
+	return aok && bok
+}
+func (c BenchCmp) DeltaNsPerOp() Delta { return Delta{c.Before.NsPerOp, c.After.NsPerOp} }
+func (c BenchCmp) DeltaMBPerS() Delta  { return Delta{c.Before.MBPerS, c.After.MBPerS} }
 func (c BenchCmp) DeltaAllocedBytesPerOp() Delta {
 	return Delta{float64(c.Before.AllocedBytesPerOp), float64(c.After.AllocedBytesPerOp)}
 }
 func (c BenchCmp) DeltaAllocsPerOp() Delta {
 	return Delta{float64(c.Before.AllocsPerOp), float64(c.After.AllocsPerOp)}
+}
+func (c BenchCmp) DeltaForUnit(unit string) Delta {
+	return Delta{c.Before.Extra[unit], c.After.Extra[unit]}
 }
 
 // Delta is the before and after value for a benchmark measurement.
@@ -153,4 +162,27 @@ func (x ByDeltaAllocsPerOp) Len() int      { return len(x) }
 func (x ByDeltaAllocsPerOp) Swap(i, j int) { x[i], x[j] = x[j], x[i] }
 func (x ByDeltaAllocsPerOp) Less(i, j int) bool {
 	return lessByDelta(x[i], x[j], BenchCmp.DeltaAllocsPerOp)
+}
+
+// ByDeltaMetric sorts BenchCmps lexicographically by change
+// in the metric unit, descending, then by benchmark name.
+func ByDeltaMetric(cmps []BenchCmp, unit string) sort.Interface {
+	return byDeltaMetric{cmps, unit}
+}
+
+// byDeltaMetric sorts BenchCmps lexicographically by change
+// in the metric unit, descending, then by benchmark name.
+type byDeltaMetric struct {
+	Cmps []BenchCmp
+	Unit string
+}
+
+func (x byDeltaMetric) Len() int { return len(x.Cmps) }
+func (x byDeltaMetric) Swap(i, j int) {
+	x.Cmps[i], x.Cmps[j] = x.Cmps[j], x.Cmps[i]
+}
+func (x byDeltaMetric) Less(i, j int) bool {
+	return lessByDelta(x.Cmps[i], x.Cmps[j], func(cmp BenchCmp) Delta {
+		return cmp.DeltaForUnit(x.Unit)
+	})
 }

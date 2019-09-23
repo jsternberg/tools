@@ -26,14 +26,15 @@ const (
 
 // Benchmark is one run of a single benchmark.
 type Benchmark struct {
-	Name              string  // benchmark name
-	N                 int     // number of iterations
-	NsPerOp           float64 // nanoseconds per iteration
-	AllocedBytesPerOp uint64  // bytes allocated per iteration
-	AllocsPerOp       uint64  // allocs per iteration
-	MBPerS            float64 // MB processed per second
-	Measured          int     // which measurements were recorded
-	Ord               int     // ordinal position within a benchmark run
+	Name              string             // benchmark name
+	N                 int                // number of iterations
+	NsPerOp           float64            // nanoseconds per iteration
+	AllocedBytesPerOp uint64             // bytes allocated per iteration
+	AllocsPerOp       uint64             // allocs per iteration
+	MBPerS            float64            // MB processed per second
+	Measured          int                // which measurements were recorded
+	Ord               int                // ordinal position within a benchmark run
+	Extra             map[string]float64 // extra records additional recorded metrics
 }
 
 // ParseLine extracts a Benchmark from a single line of testing.B
@@ -83,6 +84,13 @@ func (b *Benchmark) parseMeasurement(quant string, unit string) {
 			b.AllocsPerOp = i
 			b.Measured |= AllocsPerOp
 		}
+	default:
+		if f, err := strconv.ParseFloat(quant, 64); err == nil {
+			if b.Extra == nil {
+				b.Extra = make(map[string]float64)
+			}
+			b.Extra[unit] = f
+		}
 	}
 }
 
@@ -100,6 +108,9 @@ func (b *Benchmark) String() string {
 	}
 	if (b.Measured & AllocsPerOp) != 0 {
 		fmt.Fprintf(buf, " %d allocs/op", b.AllocsPerOp)
+	}
+	for unit, v := range b.Extra {
+		fmt.Fprintf(buf, " %.2f %s", v, unit)
 	}
 	return buf.String()
 }

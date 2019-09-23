@@ -130,6 +130,42 @@ func main() {
 			fmt.Fprintf(w, "%s\t%d\t%d\t%s\n", cmp.Name(), cmp.Before.AllocedBytesPerOp, cmp.After.AllocedBytesPerOp, cmp.DeltaAllocedBytesPerOp().Percent())
 		}
 	}
+
+	extra := make(map[string]struct{})
+	for _, cmp := range cmps {
+		for unit := range cmp.Before.Extra {
+			extra[unit] = struct{}{}
+		}
+		for unit := range cmp.After.Extra {
+			extra[unit] = struct{}{}
+		}
+	}
+
+	units := make([]string, 0, len(extra))
+	for unit := range extra {
+		units = append(units, unit)
+	}
+	sort.Strings(units)
+
+	for _, unit := range units {
+		header = false
+		if *magSort {
+			sort.Sort(ByDeltaMetric(cmps, unit))
+		}
+
+		for _, cmp := range cmps {
+			if !cmp.UnitMeasured(unit) {
+				continue
+			}
+			if delta := cmp.DeltaForUnit(unit); !*changedOnly || delta.Changed() {
+				if !header {
+					fmt.Fprintf(w, "\nbenchmark\told %s\tnew %s\tdelta\n", unit, unit)
+					header = true
+				}
+				fmt.Fprintf(w, "%s\t%.2f\t%.2f\t%s\n", cmp.Name(), cmp.Before.Extra[unit], cmp.After.Extra[unit], delta.Percent())
+			}
+		}
+	}
 }
 
 func fatal(msg interface{}) {
